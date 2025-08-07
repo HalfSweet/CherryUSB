@@ -96,25 +96,53 @@ void usb_hc_low_level_init(struct usbh_bus *bus)
 
 #ifdef SOC_SF32LB58X
     //hwp_usbc->utmicfg12 = hwp_usbc->utmicfg12 | 0x3; //set xo_clk_sel
+    hwp_usbc->utmicfg23 = 0xd8;
     hwp_usbc->ldo25 = hwp_usbc->ldo25 | 0xa; //set psw_en and ldo25_en
     HAL_Delay(1);
-    hwp_usbc->swcntl3 = 0x1;                    //set utmi_en for USB2.0
+    hwp_usbc->swcntl3 = 0x1; //set utmi_en for USB2.0
     hwp_usbc->usbcfg = hwp_usbc->usbcfg | 0x40; //enable usb PLL.
-#elif defined(SOC_SF32LB56X) || defined(SOC_SF32LB52X)
+    hwp_usbc->dpbrxdisl = 0xff;
+    hwp_usbc->dpbtxdisl = 0xff;
+    hwp_usbc->utmicfg25 = hwp_usbc->utmicfg25 | 0xc0;
+#elif defined(SOC_SF32LB56X)||defined(SOC_SF32LB52X)
     hwp_hpsys_cfg->USBCR |= HPSYS_CFG_USBCR_DM_PD | HPSYS_CFG_USBCR_DP_EN | HPSYS_CFG_USBCR_USB_EN;
 #elif defined(SOC_SF32LB55X)
     hwp_hpsys_cfg->USBCR |= HPSYS_CFG_USBCR_DM_PD | HPSYS_CFG_USBCR_USB_EN;
 #endif
-#ifndef SOC_SF32LB55X
-    hwp_usbc->usbcfg |= (USB_USBCFG_AVALID | USB_USBCFG_AVALID_DR);
-    hwp_usbc->dpbrxdisl = 0xFE;
-    hwp_usbc->dpbtxdisl = 0xFE;
-#endif
-    __HAL_SYSCFG_Enable_USB();
-    hwp_usbc->usbcfg &= 0xEF;
-    hwp_usbc->dbgl = 0x80;
 
     NVIC_EnableIRQ(USBC_IRQn);
+    __HAL_SYSCFG_Enable_USB();
+    __HAL_SYSCFG_USB_DM_PD();
+
+#if defined(SF32LB52X) || defined(SF32LB56X)
+    uint16_t irq = 0x00E1;
+    hwp_usbc->intrtxe = irq;
+    hwp_usbc->intrrxe = 0x001E;
+#else
+    hwp_usbc->intrtxe = 0xFF;
+    hwp_usbc->intrrxe = 0xFF;
+#endif
+
+    hwp_usbc->intrusbe = 0xF7;
+
+    hwp_usbc->testmode = 0;
+    uint8_t power = 0;
+#ifdef SF32LB58X
+    power |= USB_POWER_HSENAB;//hs
+    //power &= (~USB_POWER_HSENAB);//fs
+#endif
+    power |= USB_POWER_SOFTCONN;
+
+    hwp_usbc->power = power;
+
+    // Start Host
+#ifdef SF32LB55X
+    hwp_usbc->devctl |= USB_DEVCTL_HR;
+#else
+    hwp_usbc->usbcfg &= 0xEF;
+    hwp_usbc->devctl |= 0x01;
+#endif
+    hwp_usbc->dbgl = 0x80;
 }
 
 void usb_hc_low_level_deinit(struct usbh_bus *bus)
@@ -136,19 +164,31 @@ void usb_hc_low_level_deinit(struct usbh_bus *bus)
     HAL_RCC_DisableModule(RCC_MOD_USBC);
 }
 
-void musb_reset_prev(void)
+void sifli_reset_port(void)
 {
+    uint8_t power;
+    power = hwp_usbc->power;
+
+    if (power & USB_POWER_RESUME)
+    {
+        HAL_Delay(20);
+        hwp_usbc->power = power & (~USB_POWER_RESUME);
+    }
+    else
+    {
+        power &= 0xf0;
+        hwp_usbc->power = power | USB_POWER_RESET;
 #if defined(SF32LB58X)
-    hwp_usbc->rsvd0 = 0xc; //58
+        hwp_usbc->rsvd0 = 0xc;//58
 #endif
+        HAL_Delay(50);
+        hwp_usbc->power &= (~USB_POWER_RESET);
+#if defined(SF32LB58X)
+        hwp_usbc->rsvd0 = 0x0;//58
+#endif
+    }
 }
 
-void musb_reset_post(void)
-{
-#if defined(SF32LB58X)
-    hwp_usbc->rsvd0 = 0x0; //58
-#endif
-}
 #endif
 
 void USBC_IRQHandler(void)
