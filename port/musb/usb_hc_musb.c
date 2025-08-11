@@ -7,6 +7,8 @@
 #include "usbh_hub.h"
 #include "usb_musb_reg.h"
 
+#include "bf0_hal.h"
+
 #define HWREG(x) \
     (*((volatile uint32_t *)(x)))
 #define HWREGH(x) \
@@ -332,6 +334,9 @@ void musb_control_urb_init(struct usbh_bus *bus, uint8_t chidx, struct usbh_urb 
     /* Without multipoint, use FADDR for host target addressing and do not access Hub/FuncAddr regs */
     HWREGB(USB_BASE + MUSB_FADDR_OFFSET) = (urb->hport->dev_addr & 0x7F);
     HWREGB(USB_TXTYPE_BASE(chidx)) = speed;
+#ifdef SF32LB58X
+    hwp_usbc->swcntl1 = 0x40;
+#endif
 #else
     HWREGB(USB_TXADDR_BASE(chidx)) = urb->hport->dev_addr;
     HWREGB(USB_TXTYPE_BASE(chidx)) = speed;
@@ -372,6 +377,9 @@ int musb_bulk_urb_init(struct usbh_bus *bus, uint8_t chidx, struct usbh_urb *urb
     /* Program RxMaxP for the IN endpoint (required in host mode) */
     HWREGH(USB_RXMAP_BASE(chidx)) = USB_GET_MAXPACKETSIZE(urb->ep->wMaxPacketSize);
         HWREGB(USB_RXINTERVAL_BASE(chidx)) = 0;
+#ifdef SF32LB58X
+    hwp_usbc->swcntl1 = 0x40;
+#endif
 #else
         HWREGB(USB_RXADDR_BASE(chidx)) = urb->hport->dev_addr;
         HWREGB(USB_RXTYPE_BASE(chidx)) = (urb->ep->bEndpointAddress & 0x0f) | speed | USB_TXTYPE1_PROTO_BULK;
@@ -395,6 +403,9 @@ int musb_bulk_urb_init(struct usbh_bus *bus, uint8_t chidx, struct usbh_urb *urb
         HWREGB(USB_TXTYPE_BASE(chidx)) = (urb->ep->bEndpointAddress & 0x0f) | speed | USB_TXTYPE1_PROTO_BULK;
         HWREGH(USB_TXMAP_BASE(chidx)) = USB_GET_MAXPACKETSIZE(urb->ep->wMaxPacketSize);
         HWREGB(USB_TXINTERVAL_BASE(chidx)) = 0;
+#ifdef SF32LB58X
+    hwp_usbc->swcntl1 = 0x40;
+#endif
 #else
         HWREGB(USB_TXADDR_BASE(chidx)) = urb->hport->dev_addr;
         HWREGB(USB_TXTYPE_BASE(chidx)) = (urb->ep->bEndpointAddress & 0x0f) | speed | USB_TXTYPE1_PROTO_BULK;
@@ -445,6 +456,9 @@ int musb_intr_urb_init(struct usbh_bus *bus, uint8_t chidx, struct usbh_urb *urb
         HWREGB(USB_RXTYPE_BASE(chidx)) = (urb->ep->bEndpointAddress & 0x0f) | speed | USB_TXTYPE1_PROTO_INT;
         HWREGH(USB_RXMAP_BASE(chidx)) = USB_GET_MAXPACKETSIZE(urb->ep->wMaxPacketSize);
         HWREGB(USB_RXINTERVAL_BASE(chidx)) = urb->ep->bInterval;
+#ifdef SF32LB58X
+    hwp_usbc->swcntl1 = 0x40;
+#endif
 #else
         HWREGB(USB_RXADDR_BASE(chidx)) = urb->hport->dev_addr;
         HWREGB(USB_RXTYPE_BASE(chidx)) = (urb->ep->bEndpointAddress & 0x0f) | speed | USB_TXTYPE1_PROTO_INT;
@@ -468,6 +482,9 @@ int musb_intr_urb_init(struct usbh_bus *bus, uint8_t chidx, struct usbh_urb *urb
         HWREGB(USB_TXTYPE_BASE(chidx)) = (urb->ep->bEndpointAddress & 0x0f) | speed | USB_TXTYPE1_PROTO_INT;
         HWREGH(USB_TXMAP_BASE(chidx)) = USB_GET_MAXPACKETSIZE(urb->ep->wMaxPacketSize);
         HWREGB(USB_TXINTERVAL_BASE(chidx)) = urb->ep->bInterval;
+#ifdef SF32LB58X
+    hwp_usbc->swcntl1 = 0x40;
+#endif
 #else
         HWREGB(USB_TXADDR_BASE(chidx)) = urb->hport->dev_addr;
         HWREGB(USB_TXTYPE_BASE(chidx)) = (urb->ep->bEndpointAddress & 0x0f) | speed | USB_TXTYPE1_PROTO_INT;
@@ -1117,6 +1134,9 @@ void USBH_IRQHandler(uint8_t busid)
                     }
                 }
             }
+#ifdef SF32LB58X
+                hwp_usbc->swcntl1 = 0x00;
+#endif
         }
     }
 
@@ -1165,6 +1185,9 @@ void USBH_IRQHandler(uint8_t busid)
                     }
                 }
             }
+            #ifdef SF32LB58X
+                hwp_usbc->swcntl1 = 0x00;
+#endif
         }
     }
     musb_set_active_ep(bus, old_ep_idx);
